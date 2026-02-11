@@ -26,7 +26,6 @@ fi
 
 echo -e "${GREEN}Step 1:${NC} Updating system packages..."
 apt-get update
-apt-get upgrade -y
 
 echo ""
 echo -e "${GREEN}Step 2:${NC} Installing required packages..."
