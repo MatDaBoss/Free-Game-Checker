@@ -164,8 +164,8 @@ start_container() {
 install_application() {
     print_step "Installing Free Game Checker..."
     
-    print_info "Updating system packages..."
-    pct exec $CTID -- bash -c "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y"
+    print_info "Updating package lists..."
+    pct exec $CTID -- bash -c "apt-get update"
     
     print_info "Installing dependencies..."
     pct exec $CTID -- bash -c "DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip python3-venv git curl wget"
