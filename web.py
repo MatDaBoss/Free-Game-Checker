@@ -35,7 +35,8 @@ def index():
                          games=games, 
                          recipients=recipients,
                          config=config,
-                         game_count=len(games))
+                         game_count=len(games),
+                         recipient_count=len(recipients))
 
 @app.route('/settings')
 def settings():
