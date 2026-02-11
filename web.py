@@ -28,15 +28,24 @@ def index():
     config = load_config()
     
     # Get recent games
-    games = db.get_recent_games(hours=168)  # Last week
+    all_games = db.get_recent_games(hours=168)  # Last week
+    
+    # Filter games by enabled stores only
+    enabled_stores = config.get('enabled_stores', [])
+    games = [game for game in all_games if game['store'] in enabled_stores]
+    
     recipients = db.get_recipients()
+    
+    # Count actual enabled stores
+    store_count = len(enabled_stores)
     
     return render_template('index.html', 
                          games=games, 
                          recipients=recipients,
                          config=config,
                          game_count=len(games),
-                         recipient_count=len(recipients))
+                         recipient_count=len(recipients),
+                         store_count=store_count)
 
 @app.route('/settings')
 def settings():
