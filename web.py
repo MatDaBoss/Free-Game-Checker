@@ -27,12 +27,37 @@ def index():
     db = Database()
     config = load_config()
     
-    # Get recent games
-    all_games = db.get_recent_games(hours=168)  # Last week
+    # Get recent games (last 7 days)
+    all_games = db.get_recent_games(hours=168)
     
     # Filter games by enabled stores only
     enabled_stores = config.get('enabled_stores', [])
-    games = [game for game in all_games if game['store'] in enabled_stores]
+    games_from_enabled_stores = [game for game in all_games if game['store'] in enabled_stores]
+    
+    # Filter out expired games by checking end_date
+    from datetime import datetime
+    current_games = []
+    for game in games_from_enabled_stores:
+        end_date = game.get('end_date', '')
+        
+        # If no end date, keep the game (still available)
+        if not end_date or end_date in ['', 'Limited time', 'Monthly rotation', 'Limited time sale']:
+            current_games.append(game)
+            continue
+        
+        # Try to parse the end date and check if expired
+        try:
+            # Handle ISO format dates (from Epic Games API)
+            if 'T' in end_date or 'Z' in end_date:
+                end_datetime = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                if end_datetime > datetime.now(end_datetime.tzinfo):
+                    current_games.append(game)
+            else:
+                # For other date formats, keep the game (can't parse reliably)
+                current_games.append(game)
+        except:
+            # If we can't parse the date, keep the game to be safe
+            current_games.append(game)
     
     recipients = db.get_recipients()
     
@@ -40,7 +65,7 @@ def index():
     store_count = len(enabled_stores)
     
     return render_template('index.html', 
-                         games=games, 
+                         games=current_games, 
                          recipients=recipients,
                          config=config,
                          game_count=len(games),
