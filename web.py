@@ -71,7 +71,7 @@ def index():
                          games=current_games, 
                          recipients=recipients,
                          config=config,
-                         game_count=len(games),
+                         game_count=len(current_games),
                          recipient_count=len(recipients),
                          store_count=store_count)
 
