@@ -116,67 +116,136 @@ class EpicGamesScraper(GameScraper):
             return []
 
 class SteamScraper(GameScraper):
-    """Steam - Free to Keep games (was paid, now free forever)"""
+    """Steam - Free to Keep games + 100% discount deals"""
     
     def __init__(self):
         super().__init__("Steam", "PC")
     
     def scrape(self) -> List[Dict]:
         try:
-            # SteamDB's Free to Keep page - games that are temporarily free
-            url = "https://steamdb.info/upcoming/free/"
-            response = requests.get(url, headers=self.headers, timeout=10)
-            response.raise_for_status()
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
             games = []
             
-            # Find the table with free to keep games
-            table = soup.find('table', class_='table')
-            if table:
-                rows = table.find_all('tr')[1:]  # Skip header
+            # METHOD 1: SteamDB's Free to Keep page (official promotions)
+            try:
+                url = "https://steamdb.info/upcoming/free/"
+                response = requests.get(url, headers=self.headers, timeout=10)
+                response.raise_for_status()
                 
-                for row in rows[:10]:  # Limit to 10
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # Find the table with free to keep games
+                table = soup.find('table', class_='table')
+                if table:
+                    rows = table.find_all('tr')[1:]  # Skip header
+                    
+                    for row in rows[:10]:  # Limit to 10
+                        try:
+                            cols = row.find_all('td')
+                            if len(cols) < 3:
+                                continue
+                            
+                            # Get game name
+                            name_cell = cols[1]
+                            title_link = name_cell.find('a')
+                            if not title_link:
+                                continue
+                            
+                            title = title_link.get_text().strip()
+                            app_id = title_link.get('href', '').split('/')[-2] if '/' in title_link.get('href', '') else ''
+                            
+                            # Get end date
+                            date_cell = cols[2] if len(cols) > 2 else None
+                            end_date = date_cell.get_text().strip() if date_cell else ''
+                            
+                            # Construct Steam store URL
+                            game_url = f"https://store.steampowered.com/app/{app_id}/" if app_id else "https://store.steampowered.com"
+                            
+                            # Try to get image from Steam API
+                            image_url = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/header.jpg" if app_id else ''
+                            
+                            games.append({
+                                'title': title,
+                                'store': self.store_name,
+                                'platform': self.platform,
+                                'description': 'Free to Keep! Claim now and keep forever. Official Steam promotion.',
+                                'image_url': image_url,
+                                'game_url': game_url,
+                                'original_price': 'Was Paid',
+                                'end_date': end_date,
+                                'store_logo': 'https://store.cloudflare.steamstatic.com/public/shared/images/header/logo_steam.svg'
+                            })
+                        except Exception as e:
+                            logger.warning(f"Error parsing SteamDB game: {e}")
+                            continue
+            except Exception as e:
+                logger.warning(f"Error scraping SteamDB: {e}")
+            
+            # METHOD 2: Steam Store direct - 100% discount search
+            try:
+                # Search for games on sale with max discount
+                search_url = "https://store.steampowered.com/search/?maxprice=free&specials=1&ndl=1"
+                response = requests.get(search_url, headers=self.headers, timeout=10)
+                response.raise_for_status()
+                
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # Find game results
+                search_results = soup.find_all('a', class_='search_result_row', limit=20)
+                
+                for result in search_results:
                     try:
-                        cols = row.find_all('td')
-                        if len(cols) < 3:
+                        # Check if it has a discount
+                        discount_pct = result.find('div', class_='discount_pct')
+                        if not discount_pct:
                             continue
                         
-                        # Get game name
-                        name_cell = cols[1]
-                        title_link = name_cell.find('a')
-                        if not title_link:
+                        discount_text = discount_pct.get_text().strip()
+                        
+                        # Only keep 100% discounts (was paid, now free)
+                        if '-100%' not in discount_text:
                             continue
                         
-                        title = title_link.get_text().strip()
-                        app_id = title_link.get('href', '').split('/')[-2] if '/' in title_link.get('href', '') else ''
+                        # Get title
+                        title_elem = result.find('span', class_='title')
+                        if not title_elem:
+                            continue
+                        title = title_elem.get_text().strip()
                         
-                        # Get end date
-                        date_cell = cols[2] if len(cols) > 2 else None
-                        end_date = date_cell.get_text().strip() if date_cell else ''
+                        # Skip if already added from SteamDB
+                        if any(g['title'] == title for g in games):
+                            continue
                         
-                        # Construct Steam store URL
-                        game_url = f"https://store.steampowered.com/app/{app_id}/" if app_id else "https://store.steampowered.com"
+                        # Get URL
+                        game_url = result.get('href', '').split('?')[0]  # Remove URL parameters
                         
-                        # Try to get image from Steam API
-                        image_url = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/header.jpg" if app_id else ''
+                        # Get image
+                        img = result.find('img')
+                        image_url = img.get('src', '') if img else ''
+                        
+                        # Get original price
+                        original_price_elem = result.find('div', class_='discount_original_price')
+                        original_price = original_price_elem.get_text().strip() if original_price_elem else 'Was Paid'
                         
                         games.append({
                             'title': title,
                             'store': self.store_name,
                             'platform': self.platform,
-                            'description': 'Free to Keep! Claim now and keep forever. Limited time offer.',
+                            'description': '100% OFF! Was paid, now completely free on Steam.',
                             'image_url': image_url,
                             'game_url': game_url,
-                            'original_price': 'Was Paid',
-                            'end_date': end_date,
+                            'original_price': original_price,
+                            'end_date': 'Limited time',
                             'store_logo': 'https://store.cloudflare.steamstatic.com/public/shared/images/header/logo_steam.svg'
                         })
+                        
                     except Exception as e:
-                        logger.warning(f"Error parsing Steam game: {e}")
+                        logger.warning(f"Error parsing Steam store game: {e}")
                         continue
+                        
+            except Exception as e:
+                logger.warning(f"Error scraping Steam store: {e}")
             
-            logger.info(f"Found {len(games)} Free to Keep games on Steam")
+            logger.info(f"Found {len(games)} free games on Steam (SteamDB + Store)")
             return games
             
         except Exception as e:
